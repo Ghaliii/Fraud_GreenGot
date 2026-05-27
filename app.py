@@ -1,7 +1,7 @@
 import streamlit as st
 
 # -------------------------
-# STATE
+# STATE INIT
 # -------------------------
 if "risk_score" not in st.session_state:
     st.session_state.risk_score = 0
@@ -12,9 +12,12 @@ if "step" not in st.session_state:
 if "beneficiary_ok" not in st.session_state:
     st.session_state.beneficiary_ok = False
 
+if "otp_ok" not in st.session_state:
+    st.session_state.otp_ok = False
+
 
 # -------------------------
-# ENGINE
+# RISK ENGINE (FIXED VALUES)
 # -------------------------
 def add_risk(value):
     st.session_state.risk_score += value
@@ -24,6 +27,7 @@ def reset():
     st.session_state.risk_score = 0
     st.session_state.step = "normal"
     st.session_state.beneficiary_ok = False
+    st.session_state.otp_ok = False
 
 
 def evaluate():
@@ -37,16 +41,18 @@ def evaluate():
         st.session_state.step = "normal"
 
 
-st.title("🛡️ Adaptive Fraud Detection System")
-
+# -------------------------
+# UI
+# -------------------------
+st.title("🛡️ Fraud Detection Engine (Adaptive Risk Model)")
 st.metric("Risk Score", st.session_state.risk_score)
 
 evaluate()
 
 # -------------------------
-# SIDEBAR SIGNALS
+# SIDEBAR EVENTS (FIXED VALUES)
 # -------------------------
-st.sidebar.header("Behavior simulation")
+st.sidebar.header("Behavioral signals")
 
 if st.sidebar.button("New Device (+20)"):
     add_risk(20)
@@ -54,7 +60,13 @@ if st.sidebar.button("New Device (+20)"):
 if st.sidebar.button("New Location (+15)"):
     add_risk(15)
 
-if st.sidebar.button("High Amount (+30)"):
+if st.sidebar.button("New Beneficiary + Instant Transfer (+25)"):
+    add_risk(25)
+
+if st.sidebar.button("Night Operation (+10)"):
+    add_risk(10)
+
+if st.sidebar.button("Unusual Amount (+30)"):
     add_risk(30)
 
 if st.sidebar.button("Failed Attempts (+20)"):
@@ -66,12 +78,31 @@ if st.sidebar.button("Reset"):
 evaluate()
 
 # -------------------------
-# LOW RISK
+# ALWAYS REQUIRED: 3DS FUNCTION
+# -------------------------
+def render_3ds():
+    otp = st.text_input("🔐 3DS Code (hint: 1234)")
+
+    if st.button("Validate 3DS"):
+        if otp == "1234":
+            st.session_state.otp_ok = True
+            st.success("3DS validated")
+        else:
+            st.error("Invalid OTP")
+
+
+# -------------------------
+# LOW RISK (<35)
 # -------------------------
 if st.session_state.step == "normal":
-    st.success("✅ Transaction approved")
 
-    if st.button("Execute transaction"):
+    st.success("✅ Transaction allowed")
+
+    st.warning("🔐 3DS required for all transactions")
+
+    render_3ds()
+
+    if st.session_state.otp_ok and st.button("Execute transaction"):
         st.success("💸 Transaction executed successfully")
 
 
@@ -80,19 +111,21 @@ if st.session_state.step == "normal":
 # -------------------------
 elif st.session_state.step == "review":
 
-    st.warning("⚠️ Suspicious behavior detected")
+    st.warning("⚠️ Medium risk transaction")
 
-    st.info("Veuillez vérifier le bénéficiaire avant exécution")
+    st.info("🔎 Vérification bénéficiaire obligatoire")
 
-    col1, col2 = st.columns(2)
-
-    if col1.button("✅ Bénéficiaire vérifié"):
+    if st.button("✅ Confirmer bénéficiaire"):
         st.session_state.beneficiary_ok = True
-        st.success("Bénéficiaire validé")
 
-    if col2.button("❌ Annuler transaction"):
-        st.session_state.step = "cancelled"
-        st.rerun()
+    st.warning("🔐 3DS required")
+
+    render_3ds()
+
+    if st.session_state.beneficiary_ok and st.session_state.otp_ok:
+
+        if st.button("Execute transaction"):
+            st.success("💸 Transaction executed after verification")
 
 
 # -------------------------
@@ -100,34 +133,16 @@ elif st.session_state.step == "review":
 # -------------------------
 elif st.session_state.step == "suspended":
 
-    st.error("⏳ Transactions suspendues pour vérification")
+    st.error("⏳ Transaction temporairement suspendue")
 
-    st.warning("Double authentification requise (3DS + bénéficiaire)")
+    st.info("Double vérification obligatoire (beneficiary + 3DS)")
 
-    # Beneficiary check
     if st.button("✅ Confirmer bénéficiaire"):
         st.session_state.beneficiary_ok = True
 
-    # 3DS
-    otp = st.text_input("🔐 3DS Code (1234)")
+    render_3ds()
 
-    if st.button("Valider 3DS"):
-        if st.session_state.beneficiary_ok and otp == "1234":
-            st.session_state.step = "approved"
-            st.rerun()
-        else:
-            st.error("Vérifications incomplètes ou OTP invalide")
+    if st.session_state.beneficiary_ok and st.session_state.otp_ok:
 
-
-# -------------------------
-# APPROVED
-# -------------------------
-elif st.session_state.step == "approved":
-    st.success("✅ Transaction exécutée après vérifications")
-
-
-# -------------------------
-# CANCELLED
-# -------------------------
-elif st.session_state.step == "cancelled":
-    st.info("❌ Transaction annulée")
+        if st.button("Release transaction"):
+            st.success("💸 Transaction released after suspension")
