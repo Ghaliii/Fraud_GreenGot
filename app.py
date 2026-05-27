@@ -1,25 +1,20 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed May 27 18:37:51 2026
-
-@author: laraki
-"""
-
 import streamlit as st
 
 # -------------------------
-# INIT STATE
+# STATE
 # -------------------------
 if "risk_score" not in st.session_state:
     st.session_state.risk_score = 0
 
 if "step" not in st.session_state:
-    st.session_state.step = "normal"  # normal / review / 3ds / blocked / cancelled / approved
+    st.session_state.step = "normal"
+
+if "beneficiary_ok" not in st.session_state:
+    st.session_state.beneficiary_ok = False
 
 
 # -------------------------
-# RISK ENGINE
+# ENGINE
 # -------------------------
 def add_risk(value):
     st.session_state.risk_score += value
@@ -28,137 +23,111 @@ def add_risk(value):
 def reset():
     st.session_state.risk_score = 0
     st.session_state.step = "normal"
+    st.session_state.beneficiary_ok = False
 
 
-def evaluate_risk():
+def evaluate():
     score = st.session_state.risk_score
 
-    if score >= 70:
-        st.session_state.step = "blocked"
-    elif score >= 40:
+    if score >= 55:
+        st.session_state.step = "suspended"
+    elif score >= 35:
         st.session_state.step = "review"
     else:
         st.session_state.step = "normal"
 
 
-# -------------------------
-# UI HEADER
-# -------------------------
-st.title("🛡️ Green-Got Fraud Detection Dashboard")
-st.write("Real-time behavioral risk scoring & adaptive friction engine")
+st.title("🛡️ Adaptive Fraud Detection System")
 
 st.metric("Risk Score", st.session_state.risk_score)
 
-evaluate_risk()
-
+evaluate()
 
 # -------------------------
-# SIDEBAR - EVENTS
+# SIDEBAR SIGNALS
 # -------------------------
-st.sidebar.header("Simulate behavioral signals")
+st.sidebar.header("Behavior simulation")
 
-if st.sidebar.button("New Device Login (+20)"):
+if st.sidebar.button("New Device (+20)"):
     add_risk(20)
 
-if st.sidebar.button("New Geo-location (+15)"):
+if st.sidebar.button("New Location (+15)"):
     add_risk(15)
 
-if st.sidebar.button("New Beneficiary + Instant Transfer (+25)"):
-    add_risk(25)
-
-if st.sidebar.button("Night Operation (+10)"):
-    add_risk(10)
-
-if st.sidebar.button("Unusual Amount (+30)"):
+if st.sidebar.button("High Amount (+30)"):
     add_risk(30)
 
-if st.sidebar.button("Failed Attempts / Probing (+20)"):
+if st.sidebar.button("Failed Attempts (+20)"):
     add_risk(20)
 
 if st.sidebar.button("Reset"):
     reset()
 
-
-evaluate_risk()
-
-
-# -------------------------
-# MAIN LOGIC
-# -------------------------
-
-score = st.session_state.risk_score
-step = st.session_state.step
-
+evaluate()
 
 # -------------------------
 # LOW RISK
 # -------------------------
-if step == "normal":
-    st.success("✅ Transaction status: APPROVED (low risk)")
-    st.write("No friction applied.")
+if st.session_state.step == "normal":
+    st.success("✅ Transaction approved")
 
-    if st.button("Execute Transaction"):
+    if st.button("Execute transaction"):
         st.success("💸 Transaction executed successfully")
 
 
 # -------------------------
-# MEDIUM RISK (>=40)
-# PUSH + BENEFICIARY CHECK
+# MEDIUM RISK (35–54)
 # -------------------------
-elif step == "review":
+elif st.session_state.step == "review":
 
-    st.warning("🚨 Suspicious activity detected")
+    st.warning("⚠️ Suspicious behavior detected")
 
-    st.info("Opération suspecte, veuillez vérifier le bénéficiaire")
+    st.info("Veuillez vérifier le bénéficiaire avant exécution")
 
     col1, col2 = st.columns(2)
 
     if col1.button("✅ Bénéficiaire vérifié"):
-        st.session_state.step = "3ds"
-        st.rerun()
+        st.session_state.beneficiary_ok = True
+        st.success("Bénéficiaire validé")
 
-    if col2.button("❌ Annuler le paiement"):
+    if col2.button("❌ Annuler transaction"):
         st.session_state.step = "cancelled"
         st.rerun()
 
 
 # -------------------------
-# 3DS STEP-UP AUTH
+# HIGH RISK (>=55)
 # -------------------------
-elif step == "3ds":
+elif st.session_state.step == "suspended":
 
-    st.warning("🔐 3DS Authentication Required")
+    st.error("⏳ Transactions suspendues pour vérification")
 
-    st.write("Veuillez valider la transaction via 3DS (OTP / biométrie simulée)")
+    st.warning("Double authentification requise (3DS + bénéficiaire)")
 
-    otp = st.text_input("Enter OTP code")
+    # Beneficiary check
+    if st.button("✅ Confirmer bénéficiaire"):
+        st.session_state.beneficiary_ok = True
 
-    if st.button("Validate 3DS"):
-        if otp == "1234":  # simulation
+    # 3DS
+    otp = st.text_input("🔐 3DS Code (1234)")
+
+    if st.button("Valider 3DS"):
+        if st.session_state.beneficiary_ok and otp == "1234":
             st.session_state.step = "approved"
             st.rerun()
         else:
-            st.error("Invalid OTP")
+            st.error("Vérifications incomplètes ou OTP invalide")
 
 
 # -------------------------
-# APPROVED AFTER 3DS
+# APPROVED
 # -------------------------
-elif step == "approved":
-    st.success("✅ Transaction approved after 3DS authentication")
-    st.balloons()
-
-
-# -------------------------
-# BLOCKED HIGH RISK
-# -------------------------
-elif step == "blocked":
-    st.error("⛔ Transaction BLOCKED")
-    st.write("Cooling-off period activated due to high fraud risk")
+elif st.session_state.step == "approved":
+    st.success("✅ Transaction exécutée après vérifications")
 
 
 # -------------------------
 # CANCELLED
 # -------------------------
-elif step == "cancelled":
-    st.info("❌ Transaction cancelled by user")
+elif st.session_state.step == "cancelled":
+    st.info("❌ Transaction annulée")
